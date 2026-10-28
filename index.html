@@ -54,7 +54,7 @@
     <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none"><input type="checkbox" id="rememberChk" class="w-4 h-4 accent-amber-500"> จดจำรหัสผ่านบนเครื่องนี้</label>
     <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-lg transition shadow-md">เข้าสู่ระบบ</button>
   </form>
-  <div class="max-w-sm mx-auto mt-5 text-center">
+  <div id="setupWrap" class="max-w-sm mx-auto mt-5 text-center">
     <button type="button" onclick="toggleSetup()" class="text-xs text-slate-500 hover:text-amber-600 underline"><svg class="ic"><use href="#i-fa-user-gear"/></svg> ตั้งค่าเซิร์ฟเวอร์</button>
     <div id="setupBox" class="hidden mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-left text-xs">
       <p class="font-bold text-slate-700">ลิงก์เซิร์ฟเวอร์ (Web App URL ที่ลงท้าย /exec)</p>
@@ -214,8 +214,8 @@ const LOGO_DATA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAH0CAYAAAD
 const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzVAJx5YPPrF1ob5EZY9cZ_5I5vArzYHCfLk7-diUu9tXdde5vI_W8Tz7end7WCwLGTGA/exec';
 const validApi = u => /^https:\/\/script\.google\.com\/.+\/exec$/.test(String(u||'').trim());
 let API_URL = DEFAULT_API_URL;
-try{ API_URL = localStorage.getItem('watchman_api') || API_URL; }catch(e){}
-try{ // เปิดจากลิงก์ที่แอดมินส่งให้ (มี ?api=...) จะตั้งค่าให้อัตโนมัติ
+if(!DEFAULT_API_URL){ try{ API_URL = localStorage.getItem('watchman_api') || API_URL; }catch(e){} }
+if(!DEFAULT_API_URL) try{ // เปิดจากลิงก์ที่แอดมินส่งให้ (มี ?api=...) จะตั้งค่าให้อัตโนมัติ
   const q = new URLSearchParams(location.search).get('api');
   if(q && validApi(q)){ if(q!==API_URL){ localStorage.setItem('watchman_api', q); API_URL = q; } history.replaceState(null,'',location.pathname); }
 }catch(e){}
@@ -552,6 +552,7 @@ function enterApp(found){
 }
 function toggleSetup(){ document.getElementById('setupBox').classList.toggle('hidden'); }
 function renderSetup(){
+  if(DEFAULT_API_URL){ document.getElementById('setupWrap').classList.add('hidden'); return; } // ลิงก์เซิร์ฟเวอร์ฝังในไฟล์แล้ว: ซ่อนเมนูตั้งค่าจากพนักงาน
   document.getElementById('apiInput').value = API_URL || '';
   const wrap = document.getElementById('staffLinkWrap');
   if(!API_URL){ document.getElementById('setupBox').classList.remove('hidden'); wrap.classList.add('hidden'); return; }
