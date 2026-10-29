@@ -342,15 +342,19 @@ const fmtDT = d => `${fmtD(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 function fmtClock(ts){ if(!ts) return '-'; const d=new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 const DOW = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'], DOWFULL = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 function daySchedDow(st, dow){
-  const o = (st.days||{})[dow];
-  return o || {checkTime:st.checkTime, endTime:st.endTime};
+  const o = (st.days||{})[dow] || {};
+  return {
+    checkTime: o.checkTime || st.checkTime,
+    endTime: o.endTime || st.endTime,
+    wage: (o.wage!==undefined && o.wage!==null && o.wage!=='' && isFinite(Number(o.wage))) ? Number(o.wage) : Number(st.wage)
+  };
 }
 function daySched(st, d){
   return daySchedDow(st, d.getDay());
 }
 function scheduleText(st){
   const g = {};
-  for(let d=0; d<7; d++){ const x = daySchedDow(st,d), k = x.checkTime+' - '+x.endTime+' น.'; (g[k] = g[k]||[]).push(d); }
+  for(let d=0; d<7; d++){ const x = daySchedDow(st,d), k = x.checkTime+' - '+x.endTime+' น.'+(x.wage!==Number(st.wage) ? ' ('+x.wage+' บ.)' : ''); (g[k] = g[k]||[]).push(d); }
   const keys = Object.keys(g);
   if(keys.length===1) return keys[0];
   return keys.map(k=>{
@@ -384,7 +388,7 @@ function shiftWindow(store, now){
   return null;
 }
 function openLogFor(u, nowMs){ return attendanceLogs.find(l=>l.empId===u && l.checkOutTime==='-' && (!l.schedEnd || nowMs < l.schedEnd + 6*3600000)); }
-const logDate = l => l.shiftDate || l.checkInTime.slice(0,10);
+const logDate = l => (/^\d{4}-\d{2}-\d{2}/.test(l.shiftDate||'') ? l.shiftDate : (l.inTs ? fmtD(new Date(l.inTs)) : String(l.checkInTime||'').slice(0,10)));
 const logInTxt = l => l.inTs ? fmtClock(l.inTs) : l.checkInTime.slice(11);
 const logOutTxt = l => l.outTs ? fmtClock(l.outTs) : (l.checkOutTime && l.checkOutTime!=='-' ? l.checkOutTime.slice(11) : null);
 function workTxt(l){ if(!(l.inTs && l.outTs)) return '-'; const m = Math.round((l.outTs-l.inTs)/60000); return Math.floor(m/60)+' ชม. '+(m%60)+' น.'; }
@@ -601,11 +605,11 @@ function renderEmployeeWeekly(){
 }
 function renderStoreOptions(){
   const sel = document.getElementById('storeSelect'); sel.innerHTML='';
-  stores.forEach(s=>{ sel.innerHTML += `<option value="${s.id}">${s.name} (วันนี้ ${daySched(s,new Date()).checkTime}-${daySched(s,new Date()).endTime} น. | ค่าแรง ${s.wage} บ.)</option>`; });
+  stores.forEach(s=>{ sel.innerHTML += `<option value="${s.id}">${s.name} (วันนี้ ${daySched(s,new Date()).checkTime}-${daySched(s,new Date()).endTime} น. | ค่าแรงวันนี้ ${daySched(s,new Date()).wage} บ.)</option>`; });
 }
 function updateShiftOptions(){
   const store = stores.find(s=>s.id===document.getElementById('storeSelect').value);
-  if(store) document.getElementById('shiftDetails').innerHTML = `<p class="font-medium">• วันนี้ (วัน${DOWFULL[new Date().getDay()]}) เข้างาน <strong>${daySched(store,new Date()).checkTime} น.</strong> – เลิกงาน <strong>${daySched(store,new Date()).endTime} น.</strong></p><p class="font-medium">• ตารางเวลาร้านนี้: ${scheduleText(store)}</p><p class="font-medium">• อัตราค่าแรง: <strong>${store.wage} บาท / วัน</strong></p>`;
+  if(store) document.getElementById('shiftDetails').innerHTML = `<p class="font-medium">• วันนี้ (วัน${DOWFULL[new Date().getDay()]}) เข้างาน <strong>${daySched(store,new Date()).checkTime} น.</strong> – เลิกงาน <strong>${daySched(store,new Date()).endTime} น.</strong></p><p class="font-medium">• ตารางเวลาร้านนี้: ${scheduleText(store)}</p><p class="font-medium">• ค่าแรงวันนี้: <strong>${daySched(store,new Date()).wage} บาท</strong> (ค่าแรงปกติ ${store.wage} บาท / วัน)</p>`;
   updateLive();
   if(currentPos) calculateDistanceToStore();
 }
@@ -784,18 +788,23 @@ function renderStoresListAdmin(){
 function dayEditor(s){
   const rows = [1,2,3,4,5,6,0].map(d=>{
     const x = daySchedDow(s,d), ov = !!(s.days && s.days[d]);
-    return `<div id="dr_${s.id}_${d}" class="flex items-center gap-1.5 p-1.5 rounded-lg border ${ov?'bg-amber-50 border-amber-300':'bg-slate-50 border-slate-200'}">
+    return `<div id="dr_${s.id}_${d}" class="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border ${ov?'bg-amber-50 border-amber-300':'bg-slate-50 border-slate-200'}">
       <span class="w-16 font-bold text-[11px]">${DOWFULL[d]}</span>
       <input type="time" value="${x.checkTime}" onchange="updateDay('${s.id}',${d},'checkTime',this.value)" class="p-1 border rounded bg-white">
       <span>–</span>
-      <input type="time" value="${x.endTime}" onchange="updateDay('${s.id}',${d},'endTime',this.value)" class="p-1 border rounded bg-white"></div>`;
+      <input type="time" value="${x.endTime}" onchange="updateDay('${s.id}',${d},'endTime',this.value)" class="p-1 border rounded bg-white">
+      <input type="number" min="0" value="${x.wage}" onchange="updateDay('${s.id}',${d},'wage',this.value)" class="w-20 p-1 border rounded bg-white text-center font-bold text-emerald-700"><span class="text-[10px] text-slate-500">บ./วัน</span></div>`;
   }).join('');
-  return `<div class="p-2 bg-white border border-slate-200 rounded-lg"><p class="text-[11px] font-bold mb-1.5"><svg class="ic"><use href="#i-fa-clock"/></svg> เวลาแยกตามวัน <span class="font-normal text-slate-400">(วันที่ต่างจากเวลาปกติจะขึ้นสีเหลือง)</span></p><div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${rows}</div></div>`;
+  return `<div class="p-2 bg-white border border-slate-200 rounded-lg"><p class="text-[11px] font-bold mb-1.5"><svg class="ic"><use href="#i-fa-clock"/></svg> เวลาและค่าแรงแยกตามวัน <span class="font-normal text-slate-400">(วันที่ต่างจากปกติจะขึ้นสีเหลือง)</span></p><div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${rows}</div></div>`;
 }
 function updateDay(id,dow,f,v){
-  const st = stores.find(x=>x.id===id); if(!st || !v) return;
-  const cur = Object.assign({}, daySchedDow(st,dow)); cur[f] = v; st.days = st.days||{};
-  if(cur.checkTime===st.checkTime && cur.endTime===st.endTime) delete st.days[dow]; else st.days[dow] = cur;
+  const st = stores.find(x=>x.id===id); if(!st || v==='' || v===null) return;
+  const cur = Object.assign({}, daySchedDow(st,dow));
+  if(f==='wage'){ const n = Number(v); if(!isFinite(n) || n<0){ notify('กรุณากรอกค่าแรงเป็นตัวเลข'); renderStoresListAdmin(); return; } cur.wage = n; } else cur[f] = v;
+  st.days = st.days||{};
+  const sameDefault = cur.checkTime===st.checkTime && cur.endTime===st.endTime && cur.wage===Number(st.wage);
+  if(sameDefault) delete st.days[dow];
+  else { st.days[dow] = {checkTime:cur.checkTime, endTime:cur.endTime}; if(cur.wage!==Number(st.wage)) st.days[dow].wage = cur.wage; }
   st.hours = scheduleText(st); saveData(); renderStoreOptions(); renderAdminSummary();
   const row = document.getElementById('dr_'+id+'_'+dow);
   if(row){ const ov = !!st.days[dow]; row.classList.toggle('bg-amber-50',ov); row.classList.toggle('border-amber-300',ov); row.classList.toggle('bg-slate-50',!ov); row.classList.toggle('border-slate-200',!ov); }
@@ -823,9 +832,9 @@ function updateStore(id,f,v){
   const st = stores.find(x=>x.id===id); if(!st) return;
   if(['wage','lat','lng','radius'].includes(f)){ v = Number(v); if(isNaN(v)){ notify('กรุณากรอกเป็นตัวเลข'); renderStoresListAdmin(); return; } }
   else if(!String(v).trim()){ notify('ห้ามเว้นว่าง'); renderStoresListAdmin(); return; }
-  st[f] = v; if(f==='checkTime'||f==='endTime') st.hours = scheduleText(st);
+  st[f] = v; if(f==='checkTime'||f==='endTime'||f==='wage') st.hours = scheduleText(st);
   saveData(); renderStoreOptions(); renderAdminSummary(); renderAllAttendanceLogsTable();
-  if(f==='checkTime'||f==='endTime') renderStoresListAdmin();
+  if(f==='checkTime'||f==='endTime'||f==='wage') renderStoresListAdmin();
 }
 function addNewStore(e){
   e.preventDefault();
